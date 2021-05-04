@@ -61,9 +61,6 @@ def draw_circles(mask, frame):
 def main():
     video_stream = WebcamVideoStream(src=1).start()
 
-    start = time.time()
-    cnt = 0
-
     while True:
         frame = video_stream.read()
         frame = cv2.resize(frame, (600, 480))
@@ -96,13 +93,8 @@ def main():
         cv2.imshow("Mask", mask)
         cv2.imshow("OutputFrame", output_frame[0])
 
-        cnt += 1
 
         if cv2.waitKey(1) == 27:
-            end = time.time()
-            seconds = end - start
-            fps = cnt/seconds
-            print(fps)
             break
 
     video_stream.stop()
