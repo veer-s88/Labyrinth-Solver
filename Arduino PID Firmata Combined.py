@@ -62,18 +62,26 @@ def ErrorMessage(messageCount):
 
 def Servos(boardName):
     for i in range(servoNumb):
-        pin.append(board.get_pin('d:'+str(servoPin[i])+':s'))
+        pin.append(boardName.get_pin('d:'+str(servoPin[i])+':s'))
         pin[i].write(refAngles[i])
+        time.sleep(0.5)
+    # testingPin = boardName.digital[13]
+    # return True, testingPin
     return True
 
+# def AngleCalc(testsPin):
 def AngleCalc():
     deltaX, deltaY = angles
     if deltaX != 0 or deltaY != 0:
         deltas[0] = deltaX
         deltas[1] = deltaY
         for i in range(servoNumb):
+            # time.sleep(1)
             newAngles[i] = float(refAngles[i]) + float(deltas[i])
             pin[i].write(newAngles[i])
+        # testsPin.write(1)
+        # time.sleep(0.5)
+        # testsPin.write(0)
         print("The new x,y coordinates are: " + str(newAngles[0]) + "," + str(newAngles[1]))
 
 def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
@@ -164,8 +172,10 @@ while True:
         iter8 = pyfirmata.util.Iterator(board)
         iter8.start()
         if servosConnected == False:
+            # servosConnected, testPin = Servos(board)
             servosConnected = Servos(board)
-        AngleCalc()        
+        # AngleCalc(testPin)
+        AngleCalc()
             
             
     elif boolie == False and errorCounter < 1:
