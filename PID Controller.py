@@ -2,37 +2,34 @@ import numpy as np
 import serial
 import serial.tools.list_ports
 import csv
-import time
+    import time
 
 
 currentX = 0
 currentY = 0
+currentPosition = [currentX,currentY]
 
 setPointX = 0
 setPointY = 0
+setPoints = [setPointX,setPointY]
 
-l = 0
-
-previous_timeX = time.time()
-previous_timeY = time.time()
+previous_time = time.time()
 
 prev_angleX = 0
 prev_angleY = 0
+prev_angles = [prev_angleX,prev_angleY]
 
 prev_errorX = 0
 prev_errorY = 0
+prev_errors = [prev_errorX,prev_errorY]
 
 I_termX = 0
 I_termY = 0
-XorY = 0
 
+l = 1
 
 def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
-    global prev_errorX, prev_errorY
-    global prev_angleX, prev_angleY
-    global previous_timeX, previous_timeY
     global I_termX, I_termY
-    global XorY
 
     sample_time = 0.001
 
@@ -45,46 +42,44 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
 
     maxTilt = 5
     minTilt = -5
-    error = setPoint-currentPos
+
+    errorX = int(setPoint[0]) - int(currentPos[0])
+    errorY = int(setPoint[1]) - int(currentPos[1])
 
     if delta_t < sample_time:
-        angle = prev_angle
+        angleX = prev_angle[0]
+        angleY = prev_angle[1]
     else:
 
-        P_term = Kp * error
-        D_term = Kd * (error - prev_error) / delta_t
+        P_termX = Kp * errorX
+        D_termX = Kd * (errorX - prev_error[0]) / delta_t
+        I_termX = I_termX + Ki * errorX * delta_t
+        angleX = round(P_termX + I_termX + D_termX, 2)
+        prev_angle[0] = angleX
+        prev_error[0] = errorX
+        angleX = round(angleX, 2)
+        if angleX > maxTilt:
+            angleX = maxTilt
+        if angleX < minTilt:
+            angleX = minTilt
 
-        if XorY == 0:
-            I_termX = I_termX + Ki * error * delta_t
-            angle = round(P_term + I_termX + D_term, 2)
-            previous_timeX = current_time
-            prev_angleX = angle
-            prev_errorX = error
-            angle = round(angle, 2)
-            if angle == 0.0:
-                angle = 0.00
+        P_termY = Kp * errorY
+        D_termY = Kd * (errorY - prev_error[1]) / delta_t
+        I_termY = I_termY + Ki * errorY * delta_t
+        angleY = round(P_termY + I_termY + D_termY, 2)
+        prev_angle[1] = angleY
+        prev_error[1] = errorY
+        angleY = round(angleY, 2)
+        if angleY > maxTilt:
+            angleY = maxTilt
+        if angleY < minTilt:
+            angleY = minTilt
 
+    previous_time = current_time
+    print("ball moves from " + str(currentPos[0]) + "," + str(currentPos[1]) + " to " + str(setPoints[0]) + "," + str(setPoints[1]) + " by tilting x and y axis " + str(angleX) + " and " + str(angleY) + " degrees respectively")
+    angles = ('<' + '%+.2f' % float(angleX)) + ('%+.2f' % float(angleY) + '>')
 
-
-        elif XorY == 1:
-            I_termY = I_termY + Ki * error * delta_t
-            angle = round(P_term + I_termY + D_term, 2)
-            previous_timeY = current_time
-            prev_angleY = angle
-            prev_errorY = error
-            angle = round(angle, 2)
-            if angle == 0.0:
-                angle = 0.00
-
-
-    if angle > maxTilt:
-        angle = maxTilt
-    if angle < minTilt:
-        angle = minTilt
-
-    XorY = 1 - XorY
-
-    return angle
+    return angles
 
 
 def Getsetpoints(i):
@@ -97,33 +92,22 @@ def Getsetpoints(i):
     return setX, setY
 
 
-##arduino = serial.Serial('COM5', 115200, timeout=.1)
+#arduino = serial.Serial('COM7', 115200, timeout=.1)
 
 while True:
 
-    if (setPointX - 0.05) <= currentX <= (setPointX + 0.05) and (setPointY - 0.05) <= currentY <= (setPointY + 0.05):
-        l += 1
+    if (float(setPoints[0]) - 0.05) <= currentPosition[0] <= (float(setPoints[0]) + 0.05) and (float(setPoints[1]) - 0.05) <= currentPosition[1] <= (float(setPoints[1]) + 0.05):
         I_termX = 0
         I_termY = 0
+        l += 1
 
     setPoints = Getsetpoints(l)
-    setPointX = int(setPoints[0])
-    setPointY = int(setPoints[1])
 
-    angleX = (PIDcontrol(currentX, setPointX, prev_angleX, prev_errorX, previous_timeX))
-    angleY = (PIDcontrol(currentY, setPointY, prev_angleY, prev_errorY, previous_timeY))
+    angles = (PIDcontrol(currentPosition, setPoints, prev_angles, prev_errors, previous_time))
 
-    angl = ('%+.2f' % float(angleX))+('%+.2f' % float(angleY))
-    angles = angl.encode()
-
-
-   ## arduino.write(angles)
+    #arduino.write(angles)
     print(angles)
-    print("ball moves from " + str(currentX) + "," + str(currentY) + " to " + str(setPointX) + "," + str(setPointY) + " by tilting x and y axis " + str(angleX) + " and " + str(angleY) + " degrees respectively")
+    print(I_termY)
 
-    prevPosX = currentX
-    prevPosY = currentY
 
-#add plus to the front
-#0.0 to 0.00
 
