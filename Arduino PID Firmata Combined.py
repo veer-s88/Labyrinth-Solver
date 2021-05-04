@@ -35,19 +35,19 @@ servoPin = [2, 3] # change/add for pin numbers servos connected to on Arduino
 pin = []
 refAngles = [90,90]
 newAngles = [0,0]
-deltas = []
+deltas = [0,0]
 
 def ArduinoCheck():
     ports = list(serial.tools.list_ports.comports())
     i = 0
     for p in ports:
+        i += 1
         if "Arduino" in p.description:
             autoCOM = p[0]
             return True, autoCOM 
         elif i == (len(ports)) and "Arduino" not in p.description:
             i = 0
             return False, '0'
-        i += 1
 
 def CloseCOMPort():
     ser = serial.Serial(COMport,57600)
@@ -68,13 +68,13 @@ def Servos(boardName):
 
 def AngleCalc():
     deltaX, deltaY = angles
-    deltas.append(deltaX)
-    deltas.append(deltaY)
-    print("DELTA Y: " + str(deltaY))
-    for i in range(servoNumb):
-        newAngles[i] = refAngles[i] + deltas[i]
-        pin[i].write(newAngles[i])
-    print("The new angle is: " + str(newAngles[0]) + "," + str(newAngles[1]))
+    if deltaX != 0 or deltaY != 0:
+        deltas[0] = deltaX
+        deltas[1] = deltaY
+        for i in range(servoNumb):
+            newAngles[i] = float(refAngles[i]) + float(deltas[i])
+            pin[i].write(newAngles[i])
+        print("The new x,y coordinates are: " + str(newAngles[0]) + "," + str(newAngles[1]))
 
 def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
     global I_termX, I_termY
@@ -149,7 +149,6 @@ while True:
 
     angles = (PIDcontrol(currentPosition, setPoints, prev_angles, prev_errors, previous_time))
     print(angles)
-
     boolie, returnBoard = ArduinoCheck()
     if boolie == True:
         if messageCounter == 0:
