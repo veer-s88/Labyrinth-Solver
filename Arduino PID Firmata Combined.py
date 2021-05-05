@@ -96,11 +96,11 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
     Ki = 0.0052
     Kd = 0.8143
 
-    maxTilt = 5
-    minTilt = -5
+    maxTilt = 90
+    minTilt = -90
 
-    errorX = int(setPoint[0]) - int(currentPos[0])
-    errorY = int(setPoint[1]) - int(currentPos[1])
+    errorX = float(setPoint[0]) - float(currentPos[0])
+    errorY = float(setPoint[1]) - float(currentPos[1])
 
     if delta_t < sample_time:
         angleX = prev_angle[0]
@@ -110,7 +110,9 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
         P_termX = Kp * errorX
         D_termX = Kd * (errorX - prev_error[0]) / delta_t
         I_termX = I_termX + Ki * errorX * delta_t
-        angleX = round(P_termX + I_termX + D_termX, 2)
+        if I_termX >= 0.03:
+            I_termX = 0.03
+        angleX = round(P_termX + I_termX + D_termX, 2)*20
         prev_angle[0] = angleX
         prev_error[0] = errorX
         angleX = round(angleX, 2)
@@ -122,7 +124,9 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
         P_termY = Kp * errorY
         D_termY = Kd * (errorY - prev_error[1]) / delta_t
         I_termY = I_termY + Ki * errorY * delta_t
-        angleY = round(P_termY + I_termY + D_termY, 2)
+        if I_termY >= 0.03:
+            I_termY = 0.03
+        angleY = round(P_termY + I_termY + D_termY, 2)*30
         prev_angle[1] = angleY
         prev_error[1] = errorY
         angleY = round(angleY, 2)
@@ -143,27 +147,32 @@ def Getsetpoints(i):
         data = f.readlines()
     line = data[i]
     coords = line.split()
-    setX = coords[0]
-    setY = coords[1]
+    setX = round(int(coords[0]) / 3000, 2)
+    setY = round(int(coords[1]) / 3000, 2)
     return setX, setY
 
                     
 while True:
     setPoints = Getsetpoints(l)
-    if (float(setPoints[0]) - 0.05) <= currentPosition[0] <= (float(setPoints[0]) + 0.05) and (float(setPoints[1]) - 0.05) <= currentPosition[1] <= (float(setPoints[1]) + 0.05):
+    if (float(setPoints[0]) - 0.05) <= currentPosition[0] <= (float(setPoints[0]) + 0.05) and (
+            float(setPoints[1]) - 0.05) <= currentPosition[1] <= (float(setPoints[1]) + 0.05):
         I_termX = 0
         I_termY = 0
         l += 1
+    else:
+        angles = (PIDcontrol(currentPosition, setPoints, prev_angles, prev_errors, previous_time))
+
 
     angles = (PIDcontrol(currentPosition, setPoints, prev_angles, prev_errors, previous_time))
     print(angles)
+
     boolie, returnBoard = ArduinoCheck()
     if boolie == True:
         if messageCounter == 0:
             messageCounter += 1
             print("Communication successfully started")  
             COMport = ''.join(returnBoard)
-            errorCounter = 0;
+            errorCounter = 0
             if COMport:
                 CloseCOMPort()
                 board = ArduinoMega(COMport)
@@ -174,12 +183,11 @@ while True:
         if servosConnected == False:
             # servosConnected, testPin = Servos(board)
             servosConnected = Servos(board)
+        AngleCalc()
         # AngleCalc(testPin)
         AngleCalc()
-            
             
     elif boolie == False and errorCounter < 1:
         errorCounter = ErrorMessage(errorCounter)
         servosConnected = False
         messageCounter = 0
-          
