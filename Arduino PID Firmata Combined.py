@@ -4,8 +4,8 @@ import time
 import serial
 import serial.tools.list_ports
 
-currentX = None
-currentY = None
+currentX = 0
+currentY = 0
 currentPosition = [currentX,currentY]
 
 setPointX = 0
@@ -25,7 +25,7 @@ prev_errors = [prev_errorX,prev_errorY]
 I_termX = 0
 I_termY = 0
 
-l = 1
+l = 0
 
 errorCounter = 0
 messageCounter = 0
@@ -35,19 +35,19 @@ servoPin = [2, 3] # change/add for pin numbers servos connected to on Arduino
 pin = []
 refAngles = [90,90]
 newAngles = [0,0]
-deltas = []
+deltas = [0,0]
 
 def ArduinoCheck():
     ports = list(serial.tools.list_ports.comports())
     i = 0
     for p in ports:
+        i += 1
         if "Arduino" in p.description:
             autoCOM = p[0]
             return True, autoCOM 
         elif i == (len(ports)) and "Arduino" not in p.description:
             i = 0
             return False, '0'
-        i += 1
 
 def CloseCOMPort():
     ser = serial.Serial(COMport,57600)
@@ -62,19 +62,27 @@ def ErrorMessage(messageCount):
 
 def Servos(boardName):
     for i in range(servoNumb):
-        pin.append(board.get_pin('d:'+str(servoPin[i])+':s'))
+        pin.append(boardName.get_pin('d:'+str(servoPin[i])+':s'))
         pin[i].write(refAngles[i])
+        time.sleep(0.5)
+    # testingPin = boardName.digital[13]
+    # return True, testingPin
     return True
 
+# def AngleCalc(testsPin):
 def AngleCalc():
     deltaX, deltaY = angles
-    deltas.append(deltaX)
-    deltas.append(deltaY)
-    print("DELTA Y: " + str(deltaY))
-    for i in range(servoNumb):
-        newAngles[i] = refAngles[i] + deltas[i]
-        pin[i].write(newAngles[i])
-    print("The new angle is: " + str(newAngles[0]) + "," + str(newAngles[1]))
+    if deltaX != 0 or deltaY != 0:
+        deltas[0] = deltaX
+        deltas[1] = deltaY
+        for i in range(servoNumb):
+            # time.sleep(1)
+            newAngles[i] = float(refAngles[i]) + float(deltas[i])
+            pin[i].write(newAngles[i])
+        # testsPin.write(1)
+        # time.sleep(0.5)
+        # testsPin.write(0)
+        print("The new x,y coordinates are: " + str(newAngles[0]) + "," + str(newAngles[1]))
 
 def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
     global I_termX, I_termY
@@ -154,6 +162,10 @@ while True:
     else:
         angles = (PIDcontrol(currentPosition, setPoints, prev_angles, prev_errors, previous_time))
 
+
+    angles = (PIDcontrol(currentPosition, setPoints, prev_angles, prev_errors, previous_time))
+    print(angles)
+
     boolie, returnBoard = ArduinoCheck()
     if boolie == True:
         if messageCounter == 0:
@@ -169,7 +181,10 @@ while True:
         iter8 = pyfirmata.util.Iterator(board)
         iter8.start()
         if servosConnected == False:
+            # servosConnected, testPin = Servos(board)
             servosConnected = Servos(board)
+        AngleCalc()
+        # AngleCalc(testPin)
         AngleCalc()
             
     elif boolie == False and errorCounter < 1:
