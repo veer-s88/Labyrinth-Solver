@@ -201,23 +201,16 @@ def Getsetpoints(i):
 def main():
     video_stream = WebcamVideoStream(src=1).start()
 
-    setPointX = 0
-    setPointY = 0
-    setPoints = [setPointX, setPointY]
-
     previous_time = time.time()
-
     prev_angleX = 0
     prev_angleY = 0
     prev_angles = [prev_angleX, prev_angleY]
-
     prev_errorX = 0
     prev_errorY = 0
     prev_errors = [prev_errorX, prev_errorY]
-
-    I_termX = 0
-    I_termY = 0
-    setpointcounter = 1
+    global I_termX
+    global I_termY
+    setpointcounter = 0
 
     errorCounter = 0
     messageCounter = 0
