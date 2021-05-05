@@ -70,7 +70,6 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
         I_termY = I_termY + Ki * errorY * delta_t
         if I_termY >= 0.03:
             I_termY = 0.03
-
         angleY = round(P_termY + I_termY + D_termY, 2)*30
         prev_angle[1] = angleY
         prev_error[1] = errorY
