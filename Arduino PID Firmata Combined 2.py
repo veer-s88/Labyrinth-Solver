@@ -1,7 +1,17 @@
+'''
+Importing modules used in operation of code:
+'''
+
 import pyfirmata
-from pyfirmata import ArduinoMega # ArduinoMega has different pin arrangement
+''' ArduinoMega has non-standard pin arrangement.
+Requires unique application of Pyfirmata.'''
+from pyfirmata import ArduinoMega
+
+# used for Python GUI mapping servo position
+import tkinter as tk
+
 import time
-import serial
+
 import serial.tools.list_ports
 
 currentX = 0
@@ -29,60 +39,118 @@ l = 1
 
 before = 0
 
+
+
+'''
+Variables set to default states here:
+'''
+
+''' Used to restrict number of times messages displayed to 
+user. Required as function checking for connection between
+Arduino and PC ran in continuous 'while True' loop.'''
 errorCounter = 0
 messageCounter = 0
+
 servosConnected = False
-servoNumb = 2 # change to vary number of servos
-servoPin = [8,9] # change/add for pin numbers servos connected to on Arduino
+# Change to vary number of servos
+servoNumb = 2
+# Change/add for pin numbers servos connected to on Arduino
+servoPin = [8,9]
+''' Can be left empty as servo pin positions appended to
+array only once. '''
 pin = []
+
+''' Empty arrays must be assigned as zero arrays as the
+index placeholders are required to change the values in
+a loop. '''
 refAngles = [90,90]
 newAngles = [0,0]
 deltas = [0,0]
 
+'''
+Functions called in code defined below:
+'''
+
 def ArduinoCheck():
+    ''' Reads in and stores as list the COM port
+    connections currently available on PC. Iterates
+    through list to check if "Arduino" appears. '''
     ports = list(serial.tools.list_ports.comports())
     i = 0
     for p in ports:
         i += 1
         if "Arduino" in p.description:
             autoCOM = p[0]
-            return True, autoCOM 
-        elif i == (len(ports)) and "Arduino" not in p.description:
+            # Returns Boolean and string
+            return True, autoCOM
+            ''' Can only assume no connection if the array
+            has been checked until final element. '''
+        elif i == (len(ports)) and "Arduino" not in \
+            p.description or p == None:
             i = 0
+            ''' Returns Boolean and empty string so that
+            format of returned variables alligns, avoiding
+            error. '''
             return False, '0'
 
 def CloseCOMPort():
+    ''' Used to close COM port opened with Arduino so
+    if disconnected and reconnected, it resets,
+    avoiding PinAlreadyTakenError otherwise triggered. '''
     ser = serial.Serial(COMport,57600)
     ser.close()
+    # Returns none to terminate function.
     return 0
 
 def ErrorMessage(messageCount):
+    ''' Prints error message if Arduino not detected.
+    Message count returned so it is only displayed
+    once and prevents message being output infinitely
+    to user. '''
     messageCount +=1
     print("Arduino not detected")
     print("Please reconnect Arduino")
     return messageCount
 
 def Servos(boardName):
+    ''' Function takes Arduino location found in another
+    function (ArduinoCheck) as an input argument. Using
+    this it attaches a specified number of servos to
+    their associated pins. '''
     for i in range(servoNumb):
-        pin.append(boardName.get_pin('d:'+str(servoPin[i])+':s'))
+        ''' 'd.pinNumb.s' indicates a digital pin with
+        servo output. '''
+        pin.append(boardName.get_pin\
+            ('d:'+str(servoPin[i])+':s'))
         pin[i].write(refAngles[i])
+    ''' Used to test connection using Arduino's built
+    -in LED. '''
     # testingPin = boardName.digital[13]
     # return True, testingPin
     return True
 
+''' testsPin used as input to AngleCalc when testing
+as the location is required by the function to make
+it flash. '''
 # def AngleCalc(testsPin):
+
 def AngleCalc():
+    ''' Reads in x,y angles board to be moved to
+    with 0 as reference. Adds 90 degrees as required
+    by servos and writes new angles to servos. '''
     deltaX, deltaY = angles
+    # Requires some change in angle to operate.
     if deltaX != 0 or deltaY != 0:
         deltas[0] = deltaX
         deltas[1] = deltaY
         for i in range(servoNumb):
-            # time.sleep(1)
             newAngles[i] = float(refAngles[i]) + float(deltas[i])
             pin[i].write(newAngles[i])
+            
         # testsPin.write(1)
         # time.sleep(0.5)
         # testsPin.write(0)
+        
         print("The new x,y coordinates are: " + str(newAngles[0]) + "," + str(newAngles[1]))
 
 def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
@@ -176,27 +244,57 @@ while True:
     print(angles)
     time.sleep(2)
 
+
+    '''
+    As located inside main 'while True' loop, program
+    constantly monitors if Arduino
+    connected/disconnected. '''
+    
+    # Stores returned values from ArduinoCheck()
     boolie, returnBoard = ArduinoCheck()
+    
+    # If Arduino is connected:
     if boolie == True:
+        
+        # Checks message not yet output to user.
         if messageCounter == 0:
+            # Ensures message output only single time.
             messageCounter += 1
-            print("Communication successfully started")  
+            print("Communication successfully started")
+            # returnBoard concatenated to string.
             COMport = ''.join(returnBoard)
             errorCounter = 0
+            
+            # if True (COMport is non-zero value)
             if COMport:
+                ''' Close COM port in case is already
+                open in program. '''
                 CloseCOMPort()
+                ''' board stores pin arrangement of
+                Arduino Mega on COM port location. '''
                 board = ArduinoMega(COMport)
                 print("Arduino is connected to: " + COMport)
-            # ensuring overflow cannot occur in serial buffer
+                
+        # Ensures overflow cannot occur in serial buffer
         iter8 = pyfirmata.util.Iterator(board)
         iter8.start()
+        ''' As COM port closed and re-opened upon
+        connecting to Arduino, servos must be
+        re-attached. '''
+        # Checking if servos are connected:
         if servosConnected == False:
-            # servosConnected, testPin = Servos(board)
+            # Connecting servos to Arduino currently attached.
             servosConnected = Servos(board)
-        AngleCalc()
-        # AngleCalc(testPin)
-        AngleCalc()
+
+            # servosConnected, testPin = Servos(board)
+
             
+        ''' If board connected, runs AngleCalc function
+        in loop. '''
+        AngleCalc()
+
+        ''' If Arduino not connected, displays error message
+        once. '''       
     elif boolie == False and errorCounter < 1:
         errorCounter = ErrorMessage(errorCounter)
         servosConnected = False
