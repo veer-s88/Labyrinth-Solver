@@ -3,10 +3,14 @@ import cv2
 import numpy as np
 import imutils
 import pyfirmata
-from pyfirmata import ArduinoMega # ArduinoMega has different pin arrangement
+# from pyfirmata import ArduinoMega # ArduinoMega has different pin arrangement
+from pyfirmata import Arduino
 import time
 import serial
 import serial.tools.list_ports
+import tkinter as tk
+from tkinter import Tk, Canvas, Frame, BOTH
+import math
 
 class WebcamVideoStream:
     def __init__(self, src=0):
@@ -120,19 +124,61 @@ def Servos(boardName,servoNumb,servoPin,pin,refAngles):
     return True
 
 
-def AngleCalc(angles,servoNumb,pin,deltas,refAngles,newAngles):
+def AngleCalc(angles,servoNumb,pin,deltas,refAngles,newAngles,canvas, line1, line2):
+    ''' Reads in x,y angles board to be moved to
+    with 0 as reference. Adds 90 degrees as required
+    by servos and writes new angles to servos. '''
     deltaX, deltaY = angles
+    # Requires some change in angle to operate.
     if deltaX != 0 or deltaY != 0:
         deltas[0] = deltaX
         deltas[1] = deltaY
         for i in range(servoNumb):
-            # time.sleep(1)
-            newAngles[i] = float(refAngles[i]) + float(deltas[i])
-            pin[i].write(newAngles[i])
+            newAngles[i] = float(refAngles[i])\
+                + float(deltas[i])
+            pin[i].write(newAngles[i])  
         # testsPin.write(1)
         # time.sleep(0.5)
         # testsPin.write(0)
-        print("The new x,y coordinates are: " + str(newAngles[0]) + "," + str(newAngles[1]))
+        NewAnglesGUI(canvas, line1, line2)
+
+def _create_circle(self, x, y, r, **kwargs):
+    ''' Function to create a circle object in
+    the Tk window with parameters x,y,r. '''
+    return self.create_oval(x-r, y-r, x+r, y+r, **kwargs)
+tk.Canvas.create_circle = _create_circle
+
+# ISSUE WITH GUI NOT OPENING - MAINLOOP BLOCKS CODE AS WAITS FOR CHANGE
+
+def DrawServoGUI():
+    root = tk.Tk()
+    canvas = tk.Canvas(root, width=600, height=600,\
+        borderwidth=0, highlightthickness=0, bg="black")
+    # canvas.grid()
+    canvas.pack()
+    for i in range(servoNumb):
+        canvas.create_circle(xPos[i], yPos, radius,\
+               fill="white", outline="#DDD", width=4)
+    line1 = canvas.create_line(xPos[0], yPos, endX[0], endY, width=5, fill="red")
+    line2 = canvas.create_line(xPos[1], yPos, endX[1], endY, width=5, fill="red")
+    root.wm_title("Real Time Servo Positions")
+    NewAnglesGUI(canvas, line1, line2)
+    # root.mainloop()
+    return canvas,line1,line2
+    
+
+def NewAnglesGUI(canvas, line1, line2):
+    for i in range(servoNumb):
+        anglesRad[i] = newAngles[i] * (math.pi/180)
+    # TypeError: 'int' object does not support item assignment
+    endX1 = xPos[0] + radius * math.cos(anglesRad[0])
+    endY1 = yPos + radius * math.sin(anglesRad[0])
+    endX2 = xPos[1] + radius * math.cos(anglesRad[1])
+    endY2 = yPos + radius * math.sin(anglesRad[1])
+    
+    canvas.coords(line1, xPos[0], yPos, endX1, endY1)
+    canvas.coords(line2, xPos[1], yPos, endX2, endY2)
+    
 
 def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
     global I_termX, I_termY
@@ -212,7 +258,7 @@ def Getsetpoints(i):
 
 
 def main():
-    video_stream = WebcamVideoStream(src=1).start()
+    video_stream = WebcamVideoStream(src=0).start()
 
     setPointX = 0
     setPointY = 0
@@ -330,14 +376,16 @@ def main():
                     errorCounter = 0
                     if COMport:
                         CloseCOMPort(COMport)
-                        board = ArduinoMega(COMport)
+                        #board = ArduinoMega(COMport)
+                        board = Arduino(COMport)
                         print("Arduino is connected to: " + COMport)
                     # ensuring overflow cannot occur in serial buffer
                 iter8 = pyfirmata.util.Iterator(board)
                 iter8.start()
                 if servosConnected == False:
                     servosConnected = Servos(board, servoNumb, servoPin, pin, refAngles)
-                AngleCalc(angles, servoNumb, pin, deltas, refAngles, newAngles)
+                canvas, line1, line2 = DrawServoGUI()
+                AngleCalc(angles, servoNumb, pin, deltas, refAngles, newAngles, canvas, line1, line2)
 
             elif boolie == False and errorCounter < 1:
                 errorCounter = ErrorMessage(errorCounter)
