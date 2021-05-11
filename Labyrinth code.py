@@ -127,7 +127,7 @@ def AngleCalc(angles,servoNumb,pin,deltas,refAngles,newAngles):
         deltas[1] = deltaY
         for i in range(servoNumb):
             # time.sleep(1)
-            newAngles[i] = float(refAngles[i]) - float(deltas[i])
+            newAngles[i] = float(refAngles[i]) + float(deltas[i])
             pin[i].write(newAngles[i])
         # testsPin.write(1)
         # time.sleep(0.5)
@@ -142,9 +142,13 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
     current_time = time.time()
     delta_t = current_time - previous_time
 
-    Kp = 0.176
-    Ki = 0.0052
-    Kd = 0.8143
+    #Kp = 0.176
+    #Ki = 0.0052
+    #Kd = 0.8143
+
+    Kp = 0.0078213
+    Ki = 0.00005239
+    Kd = 0.20372
 
     maxTilt = 90
     minTilt = -90
@@ -160,11 +164,11 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
         P_termX = Kp * errorX
         D_termX = Kd * (errorX - prev_error[0]) / delta_t
         I_termX = I_termX + Ki * errorX * delta_t
-        if I_termX >= 1:
+        """if I_termX >= 1:
             I_termX = 1
         if I_termX <= -1:
-            I_termX = -1
-        angleX = round(P_termX + I_termX + D_termX, 2) * 20
+            I_termX = -1"""
+        angleX = -round(P_termX + I_termX + D_termX, 2) * 20
         prev_angle[0] = angleX
         prev_error[0] = errorX
         angleX = round(angleX, 2)
@@ -176,10 +180,10 @@ def PIDcontrol(currentPos, setPoint, prev_angle, prev_error, previous_time):
         P_termY = Kp * errorY
         D_termY = Kd * (errorY - prev_error[1]) / delta_t
         I_termY = I_termY + Ki * errorY * delta_t
-        if I_termY >= 1:
+        """if I_termY >= 1:
             I_termY = 1
         if I_termY <= -1:
-            I_termY = -1
+            I_termY = -1"""
         angleY = round(P_termY + I_termY + D_termY, 2) * 30
         prev_angle[1] = angleY
         prev_error[1] = errorY
@@ -201,9 +205,10 @@ def Getsetpoints(i):
         data = f.readlines()
     line = data[i]
     coords = line.split()
-    setX = round(int(coords[0]) / 300, 3)
-    setY = round(int(coords[1]) / 300, 3)
-    return setX, setY
+    setX = int(coords[0])
+    setY = int(coords[1])
+    isSettlePoint = int(coords[2])
+    return setX, setY, isSettlePoint
 
 
 def main():
@@ -225,6 +230,7 @@ def main():
     I_termX = 0
     I_termY = 0
     setpointcounter = 0
+    settle_time_start = time.time()
 
     errorCounter = 0
     messageCounter = 0
@@ -271,9 +277,9 @@ def main():
             hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
             # define upper and lower bounds for colour of image
-            red_lower = np.array([170, 90, 23])
+            red_lower = np.array([170, 120, 23])
             red_upper = np.array([179, 255, 255])
-            red_lower_2 = np.array([0, 90, 23])
+            red_lower_2 = np.array([0, 120, 23])
             red_upper_2 = np.array([10, 255, 255])
 
             # erode and dilate masked image for more defined picture of object
@@ -286,7 +292,7 @@ def main():
             mask_ball = cv2.dilate(mask_ball, kernel, iterations=2)
 
             output = draw_circle(mask_ball, result)
-            cv2.imshow('Mask of flat w/ ball', mask_ball)
+            #cv2.imshow('Mask of flat w/ ball', mask_ball)
 
             cv2.imshow("Result", output[0])
 
@@ -295,14 +301,23 @@ def main():
                 print("No ball seen on Maze, please add ball to the Maze")
 
             else:
-                ball_coords = (round((ball_centre[0]/300),3),round((ball_centre[1]/300),3))
-
+                ball_coords = (ball_centre[0], ball_centre[1])
                 setPoints = Getsetpoints(setpointcounter)
-                if (float(setPoints[0]) - 0.05) <= ball_coords[0] <= (float(setPoints[0]) + 0.05) and (
-                        float(setPoints[1]) - 0.05) <= ball_coords[1] <= (float(setPoints[1]) + 0.05):
-                    I_termX = 0
-                    I_termY = 0
-                    setpointcounter += 1
+                if (float(setPoints[0]) - 10) <= ball_coords[0] <= (float(setPoints[0]) + 10) and (
+                        float(setPoints[1]) - 10) <= ball_coords[1] <= (float(setPoints[1]) + 10):
+                    if setPoints[2] == 0:
+                        I_termX = 0
+                        I_termY = 0
+                        setpointcounter += 1
+                        settle_time_start = time.time()
+                    elif setPoints[2] == 1:
+                        settle_time_fin = time.time()
+                        if settle_time_fin - settle_time_start >= 1:
+                            I_termX = 0
+                            I_termY = 0
+                            setpointcounter += 1
+                            settle_time_start = time.time()
+
                 else:
                     angles = (PIDcontrol(ball_coords, setPoints, prev_angles, prev_errors, previous_time))
                     print(I_termX)
@@ -329,7 +344,7 @@ def main():
                 servosConnected = False
                 messageCounter = 0
 
-        cv2.imshow("Mask", mask)
+        #cv2.imshow("Mask", mask)
         cv2.imshow("OutputFrame", output_frame[0])
 
 
