@@ -116,11 +116,10 @@ def main():
             hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
             # define upper and lower bounds for colour of image
-            red_lower = np.array([170, 128, 30])
-            red_upper = np.array([179, 255, 255])
-            red_lower_2 = np.array([0, 128, 30])
-            red_upper_2 = np.array([10, 255, 255])
-
+            red_lower = np.array([170, 95, 58])  # (l_h, l_s, l_v)
+            red_upper = np.array([179, 255, 255])  # (u_h, u_s, u_v)
+            red_lower_2 = np.array([0, 95, 58])  # (l_h, l_s, l_v)
+            red_upper_2 = np.array([10, 255, 255])  # (u_h, u_s, u_v)
             # erode and dilate masked image for more defined picture of object
             mask1 = cv2.inRange(hsv, red_lower, red_upper)
             mask2 = cv2.inRange(hsv, red_lower_2, red_upper_2)
