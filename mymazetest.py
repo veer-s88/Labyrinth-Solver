@@ -271,8 +271,7 @@ def Getsetpoints():
 
 
 # function which runs the nearest neighbour algorithm to find the set point closest to the balls current position
-def nearestneighbour(setpointarray,currentPos):
-    tree = spatial.KDTree(setpointarray)
+def nearestneighbour(currentPos,tree):
     nearestNeighbour = tree.query([currentPos])
     newSetPointCounter = nearestNeighbour[1][0]
     #print(newSetPointCounter)
@@ -323,6 +322,8 @@ def main():
 
     setPointList, settlePointList = Getsetpoints()
 
+    tree = spatial.KDTree(setPointList)
+
     setPoints = [0, 0]
     settlePoint = 0
     ball_coords = [0,0]
@@ -345,10 +346,10 @@ def main():
                     I_terms = [0, 0]
                     setpointcounter += 1
                     settle_time_start = time.time()
-        elif settle_time >= 7:
+        elif settle_time >= 5:
             if startController:
                 I_terms = [0, 0]
-                setpointcounter = nearestneighbour(setPointList, ball_coords)
+                setpointcounter = nearestneighbour(ball_coords, tree)
                 settle_time_start = time.time()
 
         setPoints = setPointList[setpointcounter]
