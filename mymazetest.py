@@ -3,11 +3,17 @@ import cv2
 import numpy as np
 import imutils
 import pyfirmata
-from pyfirmata import Arduino# ArduinoMega has different pin arrangement
+from pyfirmata import ArduinoMega
 import time
 import serial
 import serial.tools.list_ports
 from scipy import spatial
+
+# used for Python GUI mapping servo position
+import tkinter as tk
+from tkinter import Tk, Canvas, Frame, BOTH
+import math
+import numpy
 
 
 I_terms = [0, 0]
@@ -41,6 +47,222 @@ class WebcamVideoStream:
 
     def stop(self):
         self.stopped = True
+
+class _App(threading.Thread):
+    
+    def __init__(self):
+        self.servoNumb = 2
+        xPos = [100, 300]
+        yPos = 100
+        _App.XPos = xPos
+        _App.YPos = yPos
+        radius = 50
+        _App.Radius = radius
+        self.lines = [0, 0]
+        threading.Thread.__init__(self)
+        self.start()
+
+    def callback(self):
+        self.root.quit()
+
+    def _create_circle(self, x, y, r, **kwargs):
+        ''' Function to create a circle object in
+        the Tk window with parameters x,y,r. '''
+        return self.create_oval(x-r, y-r, x+r, y+r, **kwargs)
+    tk.Canvas.create_circle = _create_circle
+
+    def run(self):
+        self.root = tk.Tk()
+        self.root.protocol("WM_DELETE_WINDOW", self.callback)
+
+        _App.canvas = tk.Canvas(self.root, width=400, height=200,\
+            borderwidth=0, highlightthickness=0, bg="black")
+        _App.canvas.pack()
+
+        self.root.wm_title("Real Time Servo Positions")
+
+        print("Loading servo GUI")
+        
+        xPosArr = numpy.array(_App.XPos)
+        yPos = numpy.array(_App.YPos)
+        radius = numpy.array(_App.Radius)
+        
+        for i in range(servoNumb):
+            self.canvas.create_circle(xPosArr[i], yPos,\
+                radius, fill="white", outline="#DDD", width=4)
+            self.lines[i] = self.canvas.create_line(xPosArr[i],\
+                        (yPos - radius), xPosArr[i], yPos,\
+                                        width=5, fill="red")
+
+        _App.line1 = self.lines[0]
+        _App.line2 = self.lines[1]
+
+        self.initLabelText = '90 degrees'
+
+        _App.label1Text = ('Servo 1: x-axis\n' + self.initLabelText)
+        _App.label2Text = ('Servo 2: y-axis\n' + self.initLabelText)
+
+        _App.label1 = tk.Label(self.root, text = self.label1Text)
+        _App.label1.pack(padx=15, pady=5, side=tk.LEFT)
+        _App.label1.config(width=20)
+        _App.label1.config(font=("Courier", 15))
+        _App.label2 = tk.Label(self.root, text = self.label2Text)
+        _App.label2.pack(padx=25, pady=5, side=tk.LEFT)
+        _App.label2.config(width=20)
+        _App.label2.config(font=("Courier", 15))
+        
+        self.root.mainloop()
+
+app = _App()
+    
+
+class _ConnectServos(object):
+
+    def __init__(self, board):
+        self.board = board
+        self.refAngle = 90
+        self.pin = []
+        self.servoPin = [2, 3]
+        self.servoNumb = _App.__init__
+        servoNumb = numpy.array(self.servoNumb)
+        
+    def Servos(self, board):
+        ''' Function takes Arduino location found in
+        another function (ArduinoCheck) as an input
+        argument. Using this, it attaches a specified
+        number of servos to their associated pins. '''
+        for i in range(servoNumb):
+            ''' 'd.pinNumb.s' indicates a digital pin
+            with servo output. '''
+            pin.append(board.get_pin('d:' +\
+                        str(servoPin[i]) + ':s'))
+            pin[i].write(self.refAngle)
+        return True, self.refAngle
+
+  
+# root.mainloop() keeps only runs event handlers.
+
+class _Main(_App, _ConnectServos):
+
+    def __init__(self):
+        self.anglesRad = [0, 0]
+        self.line1 = _App.line1
+        self.line2 = _App.line2
+        self.canvas = _App.canvas
+        self.root = _App.run
+        self.xPos = _App.XPos
+        self.yPos = _App.YPos
+        self.radius = _App.Radius
+        self.label1 = _App.label1
+        self.label2 = _App.label2
+        
+         
+    def NewAnglesGUI(self, newAngles):
+
+        xPosArr = numpy.array(self.xPos)
+        yPos = numpy.array(self.yPos)
+        radius = numpy.array(self.radius)
+
+        for i in range(servoNumb):
+            self.anglesRad[i] = newAngles[i] * (math.pi/180)
+        # TypeError: 'int' object does not support item assignment
+        endX1 = xPosArr[0] + radius * math.cos(self.anglesRad[0])
+        endY1 = yPos - radius * math.sin(self.anglesRad[0])
+        endX2 = xPosArr[1] + radius * math.cos(self.anglesRad[1])
+        endY2 = yPos - radius * math.sin(self.anglesRad[1])
+
+        # attribute error: type object has no attribute
+        # not creating an instance, but instead referencing
+        # the class itself
+
+        self.canvas.coords(self.line1, xPosArr[0],\
+                           yPos, endX1, endY1)
+        self.canvas.coords(self.line2, xPosArr[1],\
+                           yPos, endX2, endY2)
+
+        self.servo1AngleStr = (str(newAngles[0]) + ' degrees')
+        self.servo2AngleStr = (str(newAngles[1]) + ' degrees')
+
+        self.label1['text'] = ('Servo 1: x-axis\n' + self.servo1AngleStr)
+        self.label2['text'] = ('Servo 2: y-axis\n' + self.servo2AngleStr)
+
+        # self.root.after(100, self.NewAnglesGUI)
+
+    def AngleCalc(self, deltaX, deltaY, refAngle):
+        ''' Reads in x,y angles board to be moved to
+        with 0 as reference. Adds 90 degrees as required
+        by servos and writes new angles to servos. '''
+        deltas = [0, 0]
+        newAngles = [0, 0]
+        # Requires some change in angle to operate.
+        if deltaX != 0 or deltaY != 0:
+            deltas[0] = deltaX
+            deltas[1] = deltaY
+            for i in range(servoNumb):
+                newAngles[i] = float(refAngle) +\
+                               float(deltas[i])
+                pin[i].write(newAngles[i])  
+            # testsPin.write(1)
+            # time.sleep(0.5)
+            # testsPin.write(0)
+                
+            print("The new x,y coordinates are: " +\
+                  str(newAngles[0]) + ","\
+                  + str(newAngles[1]))
+
+            self.NewAnglesGUI(newAngles)
+
+
+
+'''
+Functions called in code defined below:
+'''
+
+def ArduinoCheck():
+    ''' Reads in and stores as list the COM port
+    connections currently available on PC. Iterates
+    through list to check if "Arduino" appears. '''
+    ports = list(serial.tools.list_ports.comports())
+    i = 0
+    for p in ports:
+        i += 1
+        if "Arduino" in p.description:
+            autoCOM = p[0]
+            # Returns Boolean and string
+            return True, autoCOM
+            ''' Can only assume no connection if the array
+            has been checked until final element. '''
+        elif i == (len(ports)) and "Arduino" not in \
+            p.description or p == None:
+            i = 0
+            ''' Returns Boolean and empty string so that
+            format of returned variables alligns, avoiding
+            error. '''
+            return False, '0'
+
+def CloseCOMPort(COMport):
+    ''' Used to close COM port opened with Arduino so
+    if disconnected and reconnected, it resets,
+    avoiding PinAlreadyTakenError otherwise triggered. '''
+    ser = serial.Serial(COMport,57600)
+    ser.close()
+    # Returns none to terminate function.
+    return 0
+
+def ErrorMessage(messageCount):
+    ''' Prints error message if Arduino not detected.
+    Message count returned so it is only displayed
+    once and prevents message being output infinitely
+    to user. '''
+    messageCount +=1
+    print("Arduino not detected")
+    print("Please reconnect Arduino")
+    return messageCount
+
+
+''' testsPin used as input to AngleCalc when testing
+as the location is required by the function to make
+it flash. '''
 
 
 def draw_circle(mask, frame):
@@ -98,55 +320,6 @@ def draw_circles(mask, frame):
 def draw_setpoints(frame, setpoints):
     cv2.circle(frame, (setpoints[0], setpoints[1]), 5, (0, 0, 0), -1)
     return frame
-
-
-def ArduinoCheck():
-    ports = list(serial.tools.list_ports.comports())
-    i = 0
-    for p in ports:
-        i += 1
-        if "Device" in p.description:
-            autoCOM = p[0]
-            return True, autoCOM
-        elif i == (len(ports)):# and "Arduino" not in p.description:
-            i = 0
-            return False, '0'
-
-
-def CloseCOMPort(COMport):
-    ser = serial.Serial(COMport, 57600)
-    ser.close()
-    return 0
-
-
-def ErrorMessage(messageCount):
-    messageCount += 1
-    print("Arduino not detected")
-    print("Please reconnect Arduino")
-    return messageCount
-
-
-def Servos(boardName,servoNumb,servoPin,pin,refAngles):
-
-    for i in range(servoNumb):
-        pin.append(boardName.get_pin('d:' + str(servoPin[i]) + ':s'))
-        pin[i].write(refAngles[i])
-    return True
-
-
-def AngleCalc(angles, servoNumb,pin,deltas,refAngles,newAngles):
-    deltaX, deltaY = angles
-    if deltaX != 0 or deltaY != 0:
-        deltas[0] = deltaX
-        deltas[1] = deltaY
-        for i in range(servoNumb):
-            # time.sleep(1)
-            newAngles[i] = float(refAngles[i]) + float(deltas[i])
-            pin[i].write(newAngles[i])
-        # testsPin.write(1)
-        # time.sleep(0.5)
-        # testsPin.write(0)
-        print("The new x,y coordinates are: " + str(newAngles[0]) + "," + str(newAngles[1]))
 
 
 # main PID control function
@@ -310,15 +483,32 @@ def main():
     settle_time_start = time.time()
     init_timer_start = time.time()
 
+    
+    '''
+    Variables set to default states here:
+    '''
+
+    ''' Used to restrict number of times messages displayed to 
+    user. Required as function checking for connection between
+    Arduino and PC ran in continuous 'while True' loop.'''
     errorCounter = 0
     messageCounter = 0
     servosConnected = False
-    servoNumb = 2  # change to vary number of servos
-    servoPin = [10, 9]  # change/add for pin numbers servos connected to on Arduino
-    pin = []
-    refAngles = [90, 90]
-    newAngles = [0, 0]
-    deltas = [0, 0]
+    
+    # Change to vary number of servos
+    # servoNumb = 2
+    # Change/add for pin numbers servos connected to on Arduino
+    # servoPin = [8,9]
+    ''' Can be left empty as servo pin positions appended to
+    array only once. '''
+    # pin = []
+
+    ''' Empty arrays must be assigned as zero arrays as the
+    index placeholders are required to change the values in
+    a loop. '''
+
+    # Arrays used in AngleCalc
+    # deltas = [0,0]
 
     setPointList, settlePointList = Getsetpoints()
 
@@ -431,28 +621,66 @@ def main():
                 PIDcontrol(ball_coords, setPoints, settlePoint, 'Y', controllerGain)
                 PIDcontrol(ball_coords, setPoints, settlePoint, 'X', controllerGain)
 
+
+            '''
+            As located inside main 'while True' loop, program
+            constantly monitors if Arduino
+            connected/disconnected. '''
+            
+            # Stores returned values from ArduinoCheck()
             boolie, returnBoard = ArduinoCheck()
+
+            # If Arduino is connected:
             if boolie == True:
+                
+                # Checks message not yet output to user.
                 if messageCounter == 0:
+                    # Ensures message output only single time.
                     messageCounter += 1
                     print("Communication successfully started")
+                    # returnBoard concatenated to string.
                     COMport = ''.join(returnBoard)
                     errorCounter = 0
+                    
+                    # if True (COMport is non-zero value)
                     if COMport:
+                        ''' Close COM port in case is already
+                        open in program. '''
                         CloseCOMPort(COMport)
-                        board = Arduino(COMport)
+                        ''' board stores pin arrangement of
+                        Arduino Mega on COM port location. '''
+                        #board = ArduinoMega(COMport)
+                        boardN = Arduino(COMport)
                         print("Arduino is connected to: " + COMport)
-                    # ensuring overflow cannot occur in serial buffer
-                iter8 = pyfirmata.util.Iterator(board)
+                        
+                # Ensures overflow cannot occur in serial buffer
+                iter8 = pyfirmata.util.Iterator(boardN)
                 iter8.start()
+                ''' As COM port closed and re-opened upon
+                connecting to Arduino, servos must be
+                re-attached. '''
+                # Checking if servos are connected:
                 if servosConnected == False:
-                    servosConnected = Servos(board, servoNumb, servoPin, pin, refAngles)
-                AngleCalc(angles, servoNumb, pin, deltas, refAngles, newAngles)
+                    # instantiating class instance
+                    _c = _ConnectServos(boardN)
+                    # Connecting servos to Arduino currently attached.
+                    servosConnected, refAngle = _c.Servos(boardN)
+                 
+                ''' If board connected, runs AngleCalc function
+                in loop. '''
+                deltaX, deltaY = angles
+                _m = _Main()
+                _m.AngleCalc(deltaX, deltaY, refAngle)
+                
 
+                ''' If Arduino not connected, displays error message
+
+                once. '''       
             elif boolie == False and errorCounter < 1:
                 errorCounter = ErrorMessage(errorCounter)
                 servosConnected = False
                 messageCounter = 0
+
 
         #cv2.imshow("Mask", mask)
         cv2.imshow("OutputFrame", output_frame[0])
