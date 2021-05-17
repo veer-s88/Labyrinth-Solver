@@ -7,6 +7,7 @@ from pyfirmata import Arduino# ArduinoMega has different pin arrangement
 import time
 import serial
 import serial.tools.list_ports
+from scipy import spatial
 
 
 I_terms = [0, 0]
@@ -133,7 +134,7 @@ def Servos(boardName,servoNumb,servoPin,pin,refAngles):
     return True
 
 
-def AngleCalc(angles,servoNumb,pin,deltas,refAngles,newAngles):
+def AngleCalc(angles, servoNumb,pin,deltas,refAngles,newAngles):
     deltaX, deltaY = angles
     if deltaX != 0 or deltaY != 0:
         deltas[0] = deltaX
@@ -147,8 +148,9 @@ def AngleCalc(angles,servoNumb,pin,deltas,refAngles,newAngles):
         # testsPin.write(0)
         print("The new x,y coordinates are: " + str(newAngles[0]) + "," + str(newAngles[1]))
 
-#main PID control function
-def PIDcontrol(currentPos, setPoint, axis,gains):
+
+# main PID control function
+def PIDcontrol(currentPos, setPoint, settlePoint, axis, gains):
     global I_terms
     global previous_times
     global prev_errors
@@ -188,7 +190,7 @@ def PIDcontrol(currentPos, setPoint, axis,gains):
         maxTilt, minTilt = 85,-85
         i = 0
         angleFactor = 11.9
-        if setPoints[2] == 4:
+        if settlePoint == 4:
             gains = [2.9, 0.2, 2.72]
     elif axis == 'Y':
         maxTilt, minTilt = 85, -85
@@ -248,26 +250,43 @@ def PIDcontrol(currentPos, setPoint, axis,gains):
 
     return angles
 
-#function which obtains values from setpoint list file
-def Getsetpoints(i):
+
+# function which obtains values from set point list file
+def Getsetpoints():
+    setPointlist = []
+    settlePointList = []
+
     with open('pathfinder0.txt', 'r') as f:
         data = f.readlines()
-    line = data[i]
-    coords = line.split()
-    setX = int(coords[0])
-    setY = int(coords[1])
-    isSettlePoint = int(coords[2])
+    for line in data:
+        nums = line.split()
+        setX = int(nums[0])
+        setY = int(nums[1])
+        coords = [setX, setY]
+        setPointlist.append(coords)
+        isSettlePoint = int(nums[2])
+        settlePointList.append(isSettlePoint)
+    #print(setPointlist, settlePointList)
+    return setPointlist, settlePointList
 
-    return setX, setY, isSettlePoint
+
+# function which runs the nearest neighbour algorithm to find the set point closest to the balls current position
+def nearestneighbour(setpointarray,currentPos):
+    tree = spatial.KDTree(setpointarray)
+    nearestNeighbour = tree.query([currentPos])
+    newSetPointCounter = nearestNeighbour[1][0]
+    #print(newSetPointCounter)
+    return newSetPointCounter
 
 
-def CheckTolerance(setPoints,ball_coords,i):
+# function which checks if the ball is close enough to the desired setpoint
+def CheckTolerance(setPoints, settlePoint, ball_coords, i):
     setpointreached = False
     if ((float(setPoints[0]) - i) <= ball_coords[0] <= (float(setPoints[0]) + i) and (
             float(setPoints[1]) - i) <= ball_coords[1] <= (float(setPoints[1]) + i)):
         setpointreached = True
     elif ((float(setPoints[0]) - 2.5*i) <= ball_coords[0] <= (float(setPoints[0]) + 2.5*i) and (
-            float(setPoints[1]) - 2.5*i) <= ball_coords[1] <= (float(setPoints[1]) + 2.5*i) and (setPoints[2] == 3)):
+            float(setPoints[1]) - 2.5*i) <= ball_coords[1] <= (float(setPoints[1]) + 2.5*i) and (settlePoint == 3)):
         setpointreached = True
     else:
         setpointreached = False
@@ -276,6 +295,7 @@ def CheckTolerance(setPoints,ball_coords,i):
 
 
 def main():
+    loop_start = time.time()
     video_stream = WebcamVideoStream(src=1).start()
 
     global setPoints
@@ -301,20 +321,52 @@ def main():
     newAngles = [0, 0]
     deltas = [0, 0]
 
+    setPointList, settlePointList = Getsetpoints()
 
+    setPoints = [0, 0]
+    settlePoint = 0
+    ball_coords = [0,0]
+    startController = False
 
     while True:
+
         controllerGain = [0.005208, 0.040, 0.00272]
-        setPoints = Getsetpoints(setpointcounter)
+
+        settle_time_fin = time.time()
+        settle_time = settle_time_fin - settle_time_start
+
+        if startController and CheckTolerance(setPoints, settlePoint, ball_coords, 12):
+            if settlePoint == 0 or 3 or 4:
+                I_terms = [0, 0]
+                setpointcounter += 1
+                settle_time_start = time.time()
+            elif settlePoint == 1:
+                if settle_time >= 1:
+                    I_terms = [0, 0]
+                    setpointcounter += 1
+                    settle_time_start = time.time()
+        elif settle_time >= 7:
+            if startController:
+                I_terms = [0, 0]
+                setpointcounter = nearestneighbour(setPointList, ball_coords)
+                settle_time_start = time.time()
+
+        setPoints = setPointList[setpointcounter]
+        settlePoint = settlePointList[setpointcounter]
         print(setpointcounter)
+
+        if settlePoint == 2:
+            print("I HAVE SOLVED THE MAZE")
+            break
+
         frame = video_stream.read()
         frame = cv2.resize(frame, (600, 480))
         blurred = cv2.GaussianBlur(frame, (11, 11), 0)
         hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
         # define upper and lower bounds for the colour of the image
-        blue_lower = np.array([54, 37, 70])
-        blue_upper = np.array([157, 255, 255])
+        blue_lower = np.array([54, 67, 58])
+        blue_upper = np.array([142, 255, 255])
         mask = cv2.inRange(hsv, blue_lower, blue_upper)
 
 
@@ -339,9 +391,9 @@ def main():
             hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
             # define upper and lower bounds for colour of image
-            red_lower = np.array([170, 95, 58]) #(l_h, l_s, l_v)
+            red_lower = np.array([170, 86, 47]) #(l_h, l_s, l_v)
             red_upper = np.array([179, 255, 255]) #(u_h, u_s, u_v)
-            red_lower_2 = np.array([0, 95, 58]) #(l_h, l_s, l_v)
+            red_lower_2 = np.array([0, 86, 47]) #(l_h, l_s, l_v)
             red_upper_2 = np.array([10, 255, 255]) #(u_h, u_s, u_v)
 
             # erode and dilate masked image for more defined picture of object
@@ -356,8 +408,8 @@ def main():
             output = draw_circle(mask_ball, result)
             #cv2.imshow('Mask of flat w/ ball', mask_ball)
 
-            output_setpoints = draw_setpoints(output[0], setPoints)
-            cv2.imshow("Result", output_setpoints)
+            output_setPoints = draw_setpoints(output[0], setPoints)
+            cv2.imshow("Result", output_setPoints)
 
             ball_centre = output[1]
             init_timer_check = time.time()
@@ -369,31 +421,14 @@ def main():
                 angles = [0,0]
                 ball_coords = [ball_centre[0], ball_centre[1]]
                 prev_positions = ball_coords
+                settle_time_start = time.time()
             else:
+
+                startController = True
                 ball_coords = [ball_centre[0], ball_centre[1]]
-                """ball_coords = (round(ball_centre[0]/30,2), round(ball_centre[1]/30,2))
-                setPoints2 = [0, 0, 0]
-                setPoints2[0] = round(int(setPoints[0]) / 30, 1)
-                setPoints2[1] = round(int(setPoints[1]) / 30, 1)
-                setPoints2[2] = setPoints[2]"""
-                if setPoints[2] == 2:
-                    print("I HAVE SOLVED THE MAZE")
-                    break
-                elif CheckTolerance(setPoints, ball_coords, 12):
-                    if setPoints[2] == 0 or 3 or 4:
-                        I_terms = [0, 0]
-                        setpointcounter += 1
-                        settle_time_start = time.time()
-                    elif setPoints[2] == 1:
-                        settle_time_fin = time.time()
-                        delta_time = settle_time_fin - settle_time_start
-                        if delta_time >= 1:
-                            I_terms = [0, 0]
-                            setpointcounter += 1
-                            settle_time_start = time.time()
-                else:
-                    PIDcontrol(ball_coords, setPoints, 'Y', controllerGain)
-                    PIDcontrol(ball_coords, setPoints, 'X', controllerGain)
+
+                PIDcontrol(ball_coords, setPoints, settlePoint, 'Y', controllerGain)
+                PIDcontrol(ball_coords, setPoints, settlePoint, 'X', controllerGain)
 
             boolie, returnBoard = ArduinoCheck()
             if boolie == True:
@@ -421,6 +456,8 @@ def main():
         #cv2.imshow("Mask", mask)
         cv2.imshow("OutputFrame", output_frame[0])
 
+        loop_time = loop_start - time.time()
+        #print(loop_time)
 
         if cv2.waitKey(1) == 27:
             break
