@@ -8,7 +8,7 @@ import time
 import serial
 import serial.tools.list_ports
 from scipy import spatial
-
+import math
 
 I_terms = [0, 0]
 previous_times = [time.time(), time.time()]
@@ -279,27 +279,33 @@ def nearestneighbour(currentPos,tree):
 
 
 # function which checks if the ball is close enough to the desired setpoint
-def CheckTolerance(setPoints, settlePoint, ball_coords, i):
+"""def CheckTolerance(setPoints, settlePoint, ball_coords, i):
+    setpointreachedX = False
+    setpointreachedY = False
     setpointreached = False
-    if ((float(setPoints[0]) - i) <= ball_coords[0] <= (float(setPoints[0]) + i) and (
-            float(setPoints[1]) - i) <= ball_coords[1] <= (float(setPoints[1]) + i)):
-        setpointreached = True
-    elif ((float(setPoints[0]) - 2.5*i) <= ball_coords[0] <= (float(setPoints[0]) + 2.5*i) and (
-            float(setPoints[1]) - 2.5*i) <= ball_coords[1] <= (float(setPoints[1]) + 2.5*i) and (settlePoint == 3)):
-        setpointreached = True
+    if settlePoint == 3:
+        setpointreachedX = math.isclose(ball_coords[0], setPoints[0], 2.5*i)
+        setpointreachedY = math.isclose(ball_coords[1], setPoints[1], 2.5*i)
     else:
-        setpointreached = False
+        setpointreachedX = math.isclose(ball_coords[0], setPoints[0], i)
+        setpointreachedY = math.isclose(ball_coords[1], setPoints[1], i)
+    if
+
+
+    return setpointreached"""
+def CheckTolerance(setPoints, ball_coords, settlePoint, i):
+    if settlePoint == 3:
+        setpointreached = np.allclose(ball_coords, setPoints, atol=2.5*i)
+    else:
+        setpointreached = np.allclose(ball_coords, setPoints, atol=i)
 
     return setpointreached
-
 
 def main():
     loop_start = time.time()
     video_stream = WebcamVideoStream(src=1).start()
 
     global setPoints
-    setpointcounter = 0
-
     global previous_times
     global I_terms
     global prev_positions
@@ -321,11 +327,10 @@ def main():
     deltas = [0, 0]
 
     setPointList, settlePointList = Getsetpoints()
-
     tree = spatial.KDTree(setPointList)
-
-    setPoints = [0, 0]
-    settlePoint = 0
+    setpointcounter = 0
+    setPoints = setPointList[setpointcounter]
+    settlePoint = settlePointList[setpointcounter]
     ball_coords = [0,0]
     startController = False
 
@@ -336,21 +341,20 @@ def main():
         settle_time_fin = time.time()
         settle_time = settle_time_fin - settle_time_start
 
-        if startController and CheckTolerance(setPoints, settlePoint, ball_coords, 12):
-            if settlePoint == 0 or 3 or 4:
+        if startController and CheckTolerance(setPoints, ball_coords, settlePoint, 12):
+            if settlePoint != 1:
                 I_terms = [0, 0]
                 setpointcounter += 1
                 settle_time_start = time.time()
-            elif settlePoint == 1:
+            else:
                 if settle_time >= 1:
                     I_terms = [0, 0]
                     setpointcounter += 1
                     settle_time_start = time.time()
-        elif settle_time >= 4:
-            if startController:
-                I_terms = [0, 0]
-                setpointcounter = nearestneighbour(ball_coords, tree)
-                settle_time_start = time.time()
+        if startController and settle_time >= 4:
+            I_terms = [0, 0]
+            setpointcounter = nearestneighbour(ball_coords, tree)
+            settle_time_start = time.time()
 
         setPoints = setPointList[setpointcounter]
         settlePoint = settlePointList[setpointcounter]
@@ -427,7 +431,6 @@ def main():
 
                 startController = True
                 ball_coords = [ball_centre[0], ball_centre[1]]
-
                 PIDcontrol(ball_coords, setPoints, settlePoint, 'Y', controllerGain)
                 PIDcontrol(ball_coords, setPoints, settlePoint, 'X', controllerGain)
 
